@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # validate-subdomains.sh
-# Usage: ./validate-subdomains.sh allsubdomains.txt
+# Usage: ./filter-wildcard.sh allsubdomains.txt
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
