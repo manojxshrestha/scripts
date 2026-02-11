@@ -14,7 +14,7 @@
 
 - GitHub: [@manojxshrestha](https://github.com/manojxshrestha)
 - X : [@manojxshrestha](https://x.com/manojxshrestha)
-- Medium: [@manojxshrestha}(https://medium.com/@manojxshrestha)
+- Medium: [@manojxshrestha](https://medium.com/@manojxshrestha)
 
 ### Support
 
