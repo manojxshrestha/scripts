@@ -2,6 +2,10 @@
 # Nuclei Automation for Signup Category
 # Targets: Authentication, registration, login endpoints
 
+# Get script directory (works from any location)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
 echo "========================================"
 echo "  Nuclei Scan: Signup Category"
 echo "========================================"
@@ -9,9 +13,10 @@ echo ""
 
 DIR_NAME="results-signup"
 
+# Auto-detect: check script directory first, then current working directory
 if [ ! -d "$DIR_NAME" ]; then
     echo "[!] Directory not found: $DIR_NAME"
-    echo "[!] Run ./process-ferox-results.sh first"
+    echo "[!] Run ./ferox2nuclei.sh first to process feroxbuster results"
     exit 1
 fi
 

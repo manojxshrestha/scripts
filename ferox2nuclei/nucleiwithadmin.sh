@@ -2,6 +2,10 @@
 # Nuclei Automation for Admin Category
 # Targets: Admin panels, dashboards, management consoles
 
+# Get script directory (works from any location)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
 echo "========================================"
 echo "  Nuclei Scan: Admin Category"
 echo "========================================"
@@ -9,10 +13,17 @@ echo ""
 
 DIR_NAME="results-admin"
 
+# Auto-detect: check script directory first, then current working directory
 if [ ! -d "$DIR_NAME" ]; then
-    echo "[!] Directory not found: $DIR_NAME"
-    echo "[!] Run ./process-ferox-results.sh first"
-    exit 1
+    # Try to find in current working directory
+    CWD_DIR="$(pwd)"
+    if [ -d "${CWD_DIR}/${DIR_NAME}" ]; then
+        echo "[*] Found results in current directory"
+    else
+        echo "[!] Directory not found: $DIR_NAME"
+        echo "[!] Run ./ferox2nuclei.sh first to process feroxbuster results"
+        exit 1
+    fi
 fi
 
 mkdir -p nuclei-results-admin

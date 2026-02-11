@@ -1,7 +1,11 @@
 #!/bin/bash
 # Feroxbuster Results Processor & Nuclei Automation
 # Created for CTF/Hackathon automation
-# Version: 2.0 - Fixed URL extraction
+# Version: 3.0 - Auto-detection of ferox files
+
+# Get script directory (works from any location)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
 
 # Color codes
 RED='\033[0;31m'
@@ -15,6 +19,53 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Feroxbuster Results Processor${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+
+# Function to find ferox files
+detect_ferox_files() {
+    local search_dir="$1"
+    local found=0
+    
+    for file in "ferox-graphql.txt" "ferox-nucleiNorm.txt" "ferox-goodENUM.txt" \
+                "ferox-admin.txt" "ferox-signup.txt" "ferox-sensitive.txt" "ferox-endpoints.txt"; do
+        if [ -f "${search_dir}/${file}" ]; then
+            cp "${search_dir}/${file}" "./${file}"
+            echo -e "${GREEN}  ✓ Found: ${file}${NC}"
+            found=$((found + 1))
+        fi
+    done
+    
+    return $found
+}
+
+# Check for command-line argument (custom path)
+if [ $# -eq 1 ]; then
+    CUSTOM_PATH="$1"
+    if [ -d "$CUSTOM_PATH" ]; then
+        echo -e "${BLUE}[*] Searching for ferox files in: $CUSTOM_PATH${NC}"
+        detect_ferox_files "$CUSTOM_PATH"
+        echo ""
+    else
+        echo -e "${RED}[!] Invalid directory: $CUSTOM_PATH${NC}"
+        exit 1
+    fi
+else
+    # Auto-detection: check current directory first, then parent
+    echo -e "${BLUE}[*] Auto-detecting feroxbuster output files...${NC}"
+    
+    # Check current directory (where script is located)
+    for file in ferox-*.txt; do
+        if [ -f "$file" ]; then
+            echo -e "${GREEN}  ✓ Found: $file${NC}"
+        fi
+    done
+    
+    # If no files found, check parent directory
+    if [ ! -f "ferox-admin.txt" ] && [ ! -f "ferox-graphql.txt" ]; then
+        echo -e "${YELLOW}[*] No ferox files in script directory, checking parent...${NC}"
+        detect_ferox_files ".."
+        echo ""
+    fi
+fi
 
 # Check if output files exist
 OUTPUT_FILES=(
