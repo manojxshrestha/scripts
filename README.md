@@ -55,12 +55,13 @@ This repository contains a curated collection of automation scripts designed for
 
 🎯 **What it does:**
 - Processes feroxbuster directory enumeration results
+- **Auto-detects ferox-*.txt files** (no manual path configuration needed!)
 - Automatically categorizes findings (Admin, API, Backups, etc.)
 - Generates ready-to-use nuclei scan commands
 - Extracts clean URLs for vulnerability scanning
 
 📦 **Includes:**
-- `ferox2nuclei.sh` - Main processor
+- `ferox2nuclei.sh` - Main processor (v3.0 with auto-detection)
 - `nucleiwithadmin.sh` - Admin panel scanning
 - `nucleiwithsensitive.sh` - Sensitive data exposure
 - `nucleiwithnucleiNorm.sh` - General CVE scanning
@@ -209,11 +210,15 @@ go install -v github.com/projectdiscovery/katana/cmd/katana@latest
 # Step 1: Run feroxbuster scans
 cat targets.txt | feroxbuster --stdin -o ferox-output.txt
 
-# Step 2: Process results
-cd ferox2nuclei
-./ferox2nuclei.sh
+# Step 2: Clone and enter the automation suite
+git clone https://github.com/manojxshrestha/scripts.git
+cd scripts/ferox2nuclei
 
-# Step 3: Run nuclei scans
+# Step 3: Run processor (auto-detects ferox files!)
+./ferox2nuclei.sh                    # Auto-detects ferox-*.txt files
+./ferox2nuclei.sh /path/to/files/    # Or specify custom path
+
+# Step 4: Run nuclei scans
 ./nucleiwithadmin.sh
 ./nucleiwithsensitive.sh
 ```
