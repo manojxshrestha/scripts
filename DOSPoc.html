@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced DoS & Rate Limiting Tester</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        h2 { color: #7ee787; margin-top: 30px; }
+        .info-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin: 15px 0; }
+        .info-box.blue { border-left: 4px solid #58a6ff; background: rgba(88, 166, 255, 0.1); }
+        .info-box.red { border-left: 4px solid #f85149; background: rgba(248, 81, 73, 0.1); }
+        .info-box.green { border-left: 4px solid #238636; background: rgba(35, 134, 54, 0.1); }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; text-align: center; }
+        .stat-box .number { font-size: 32px; font-weight: bold; }
+        .stat-box.success .number { color: #7ee787; }
+        .stat-box.failed .number { color: #f85149; }
+        .log { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 15px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .log-entry { margin: 5px 0; }
+        .log-entry.success { color: #7ee787; }
+        .log-entry.failed { color: #f85149; }
+        .log-entry.info { color: #58a6ff; }
+        .progress { width: 100%; height: 30px; background: #161b22; border-radius: 8px; overflow: hidden; margin: 20px 0; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #238636, #2ea043); width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
+        .progress-bar.vulnerable { background: linear-gradient(90deg, #da3633, #f85149); }
+        button { background: #238636; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 5px; }
+        button:hover { background: #2ea043; }
+        button:disabled { background: #30363d; cursor: not-allowed; }
+        button.stop { background: #da3633; }
+        button.stop:hover { background: #f85149; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #30363d; padding: 10px; text-align: left; }
+        th { background: #161b22; color: #58a6ff; }
+        code { background: #161b22; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .badge.critical { background: #f85149; color: white; }
+        .badge.high { background: #d29922; color: white; }
+        .badge.medium { background: #58a6ff; color: white; }
+        .badge.safe { background: #238636; color: white; }
+        .response-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin: 10px 0; font-family: 'Consolas', monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+        input[type="number"] { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 8px; border-radius: 4px; width: 80px; }
+        textarea { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 10px; border-radius: 6px; }
+        select { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 8px; border-radius: 4px; }
+        label { color: #8b949e; }
+        .summary-result { margin-top: 30px; display: none; }
+        .summary-result.show { display: block; }
+    </style>
+</head>
+<body>
+    <h1>Advanced DoS & Rate Limiting Tester</h1>
+
+    <div class="info-box blue">
+        <h3>What This Tool Does</h3>
+        <p>Tests for <strong>Unrestricted Resource Consumption</strong> (OWASP API4:2023) - No Rate Limiting.</p>
+        <p>Sends rapid/flood requests to URLs and checks if the server throttles/blocked them.</p>
+        <p><strong>If all requests return 200 = NO RATE LIMITING = VULNERABLE!</strong></p>
+        <p><strong>Note:</strong> CORS may block browser requests to different domains. Use curl for full testing.</p>
+    </div>
+
+    <div class="info-box">
+        <h3>Configuration</h3>
+        <label>URLs to test (one per line, full URL):</label><br>
+        <textarea id="urlsInput" style="width:600px;height:200px;" placeholder="Enter URLs here, one per line:
+https://example.com/api/users
+https://example.com/api/data"></textarea>
+        <br><br>
+        <label>HTTP Method:</label>
+        <select id="methodInput">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+        </select>
+        <br><br>
+        <label>Requests per URL:</label>
+        <input type="number" id="numRequests" value="50" min="1" max="1000">
+        <label style="margin-left: 20px;">Concurrency:</label>
+        <input type="number" id="concurrency" value="10" min="1" max="100">
+        <br><br>
+        <button id="startBtn" onclick="startTest()">Start Test</button>
+        <button id="stopBtn" onclick="stopTest()" class="stop" disabled>Stop</button>
+        <button onclick="resetTest()">Reset</button>
+    </div>
+
+    <div class="progress">
+        <div class="progress-bar" id="progressBar">0%</div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-box success">
+            <div class="number" id="successCount">0</div>
+            <div>HTTP 200 (Allowed)</div>
+        </div>
+        <div class="stat-box failed">
+            <div class="number" id="blockedCount">0</div>
+            <div>Blocked/Limited</div>
+        </div>
+        <div class="stat-box">
+            <div class="number" id="totalCount">0</div>
+            <div>Total Sent</div>
+        </div>
+        <div class="stat-box">
+            <div class="number" id="avgTime">0</div>
+            <div>Avg Response (ms)</div>
+        </div>
+    </div>
+
+    <h2>Results</h2>
+    <table id="summaryTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>URL</th>
+                <th>Method</th>
+                <th>Success</th>
+                <th>Blocked</th>
+                <th>Rate</th>
+                <th>Avg (ms)</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <h2>Activity Log</h2>
+    <div class="log" id="log"></div>
+
+    <div class="summary-result" id="summaryResult">
+        <div class="info-box" id="summaryBox">
+            <h3 id="summaryTitle">Test Complete</h3>
+            <div id="summaryContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let shouldStop = false;
+        let results = {};
+        let totalSent = 0;
+        let totalSuccess = 0;
+        let totalBlocked = 0;
+        let totalTime = 0;
+        let urls = [];
+        let logCount = 0;
+
+        function getUrls() {
+            const input = document.getElementById('urlsInput').value;
+            const lines = input.split('\n').filter(l => l.trim());
+            return lines.map((url, i) => ({ url: url.trim(), name: 'URL ' + (i+1) }));
+        }
+
+        function init() {
+            urls = getUrls();
+            document.getElementById('log').innerHTML = '';
+            results = {};
+            urls.forEach(u => {
+                results[u.url] = { success: 0, blocked: 0, errors: 0 };
+            });
+        }
+
+        function log(msg, type) {
+            const el = document.getElementById('log');
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + (type || 'info');
+            div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+            el.insertBefore(div, el.firstChild);
+        }
+
+        function updateUI() {
+            document.getElementById('successCount').textContent = totalSuccess;
+            document.getElementById('blockedCount').textContent = totalBlocked;
+            document.getElementById('totalCount').textContent = totalSent;
+
+            const avg = totalSent > 0 ? Math.round(totalTime / totalSent) : 0;
+            document.getElementById('avgTime').textContent = avg;
+
+            const numReq = parseInt(document.getElementById('numRequests').value) || 1;
+            const pct = Math.min((totalSent / (numReq * urls.length)) * 100, 100);
+            const bar = document.getElementById('progressBar');
+            bar.style.width = pct + '%';
+            bar.textContent = pct.toFixed(1) + '%';
+            if (totalBlocked === 0 && totalSuccess > 20) bar.classList.add('vulnerable');
+
+            const tbody = document.querySelector('#summaryTable tbody');
+            tbody.innerHTML = '';
+            const method = document.getElementById('methodInput').value;
+            urls.forEach((u, i) => {
+                const r = results[u.url];
+                const total = r.success + r.blocked;
+                const rate = total > 0 ? ((r.success / total) * 100).toFixed(1) : 0;
+                const avg = total > 0 ? (totalTime / total).toFixed(0) : 0;
+                let status = 'safe', text = 'PROTECTED';
+                if (total > 10) {
+                    if (rate > 95) { status = 'critical'; text = 'VULNERABLE'; }
+                    else if (rate > 70) { status = 'high'; text = 'PARTIAL'; }
+                    else if (rate > 50) { status = 'medium'; text = 'LIMITED'; }
+                }
+                tbody.innerHTML += '<tr><td>' + (i+1) + '</td><td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;"><code>' + u.url + '</code></td><td><code>' + method + '</code></td><td style="color:#7ee787">' + r.success + '</td><td style="color:#f85149">' + (r.blocked + r.errors) + '</td><td>' + rate + '%</td><td>' + avg + '</td><td><span class="badge ' + status + '">' + text + '</span></td></tr>';
+            });
+        }
+
+        async function test() {
+            const numReq = parseInt(document.getElementById('numRequests').value) || 10;
+            const conc = parseInt(document.getElementById('concurrency').value) || 5;
+            const method = document.getElementById('methodInput').value;
+
+            if (urls.length === 0) {
+                log('No URLs to test!', 'info');
+                return;
+            }
+
+            log('Starting test: ' + urls.length + ' URLs, ' + numReq + ' reqs each, ' + conc + ' concurrent', 'info');
+
+            const perUrl = Math.ceil(numReq / urls.length);
+
+            for (let round = 0; round < perUrl && isRunning && !shouldStop; round++) {
+                const promises = [];
+                for (let j = 0; j < conc && j < urls.length; j++) {
+                    const urlObj = urls[j % urls.length];
+                    const startTime = performance.now();
+                    promises.push(
+                        fetch(urlObj.url, { method: method })
+                            .then(res => {
+                                const duration = performance.now() - startTime;
+                                totalSent++;
+                                totalTime += duration;
+                                if (res.status === 200) {
+                                    results[urlObj.url].success++;
+                                    totalSuccess++;
+                                    log(urlObj.name + ': HTTP 200 (' + duration.toFixed(0) + 'ms)', 'success');
+                                } else {
+                                    results[urlObj.url].blocked++;
+                                    totalBlocked++;
+                                    log(urlObj.name + ': HTTP ' + res.status + ' (' + duration.toFixed(0) + 'ms)', 'failed');
+                                }
+                            })
+                            .catch(e => {
+                                const duration = performance.now() - startTime;
+                                totalSent++;
+                                totalTime += duration;
+                                results[urlObj.url].errors++;
+                                totalBlocked++;
+                                log(urlObj.name + ': ' + e.message, 'failed');
+                            })
+                    );
+                }
+                await Promise.all(promises);
+                updateUI();
+                await new Promise(r => setTimeout(r, 50));
+            }
+
+            if (isRunning && !shouldStop) {
+                finishTest();
+            }
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            isRunning = false;
+        }
+
+        function finishTest() {
+            log('Test complete!', 'info');
+            const vulnCount = urls.filter(u => {
+                const r = results[u.url];
+                return r.success + r.blocked > 10 && (r.success / (r.success + r.blocked)) > 0.95;
+            }).length;
+
+            const box = document.getElementById('summaryBox');
+            const title = document.getElementById('summaryTitle');
+            const content = document.getElementById('summaryContent');
+
+            if (vulnCount > 0) {
+                box.className = 'info-box red';
+                title.textContent = 'VULNERABLE - No Rate Limiting!';
+                content.innerHTML = '<p><strong>' + vulnCount + '/' + urls.length + ' URLs are VULNERABLE</strong></p><p>All/few requests succeeded. No throttling detected.</p><p><strong>Severity:</strong> HIGH</p>';
+            } else if (totalSuccess > 0) {
+                box.className = 'info-box blue';
+                title.textContent = 'PARTIALLY PROTECTED';
+                content.innerHTML = '<p>' + totalSuccess + ' succeeded, ' + totalBlocked + ' blocked.</p>';
+            } else {
+                box.className = 'info-box green';
+                title.textContent = 'WELL PROTECTED';
+                content.innerHTML = '<p>Most/all requests were blocked or rate limited.</p>';
+            }
+
+            document.getElementById('summaryResult').classList.add('show');
+        }
+
+        function startTest() {
+            init();
+            isRunning = true;
+            shouldStop = false;
+            totalSent = 0;
+            totalSuccess = 0;
+            totalBlocked = 0;
+            totalTime = 0;
+
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('summaryResult').classList.remove('show');
+            document.getElementById('progressBar').classList.remove('vulnerable');
+
+            log('Starting DoS test...', 'info');
+            test();
+        }
+
+        function stopTest() {
+            shouldStop = true;
+            isRunning = false;
+            log('Test stopped', 'info');
+            finishTest();
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+        }
+
+        function resetTest() {
+            isRunning = false;
+            shouldStop = false;
+            totalSent = 0;
+            totalSuccess = 0;
+            totalBlocked = 0;
+            totalTime = 0;
+
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressBar').textContent = '0%';
+            document.getElementById('progressBar').classList.remove('vulnerable');
+            document.getElementById('successCount').textContent = '0';
+            document.getElementById('blockedCount').textContent = '0';
+            document.getElementById('totalCount').textContent = '0';
+            document.getElementById('avgTime').textContent = '0';
+            document.getElementById('summaryResult').classList.remove('show');
+            document.querySelector('#summaryTable tbody').innerHTML = '';
+            log('Reset complete', 'info');
+        }
+
+        init();
+        log('Tool ready - Click Start Test or modify URLs above', 'info');
+    </script>
+</body>
+</html>
