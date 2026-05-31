@@ -26,10 +26,14 @@ grep -E -i "https?://([a-zA-Z0-9.-]+\.)?$escaped_domain([/:?#]|$)" "$input_file"
 
 echo "Filtered URLs saved to $temp_file"
 
-# Step 2: Check liveness and output only live URLs to final file
-httpx -silent -follow-redirects -no-color -threads 100 -timeout 5 -mc 200,201,202,204,301,302,303,307,308 < "$temp_file" > "$output_file"
+# Step 2: Check liveness with all status codes + show status/size
+httpx -silent -follow-redirects -no-color -threads 100 -timeout 5 -sc -cl < "$temp_file" > "${output_file}.tmp"
 
-# Optional: remove temp file if you don't need it
-# rm "$temp_file"
+# Overwrite temp file with httpx results (has status + size for manual review)
+mv "${output_file}.tmp" "$temp_file"
 
-echo "Live URLs only saved to $output_file"
+# Strip to just URLs for automation tools
+awk '{print $1}' "$temp_file" > "$output_file"
+
+echo "Detailed results (with status codes) saved to $temp_file"
+echo "Clean URLs (for automation) saved to $output_file"
