@@ -28,7 +28,12 @@ wget -nc https://raw.githubusercontent.com/manojxshrestha/wordlists/refs/heads/m
 cd ..
 
 echo "[+] Installing Nuclei..."
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+NUCLEI_VERSION=$(curl -sL https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep -oP '"tag_name": "\K[^"]+')
+wget -q "https://github.com/projectdiscovery/nuclei/releases/download/${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION#v}_linux_amd64.zip"
+unzip -qo "nuclei_${NUCLEI_VERSION#v}_linux_amd64.zip" nuclei
+mv nuclei "$HOME/go/bin/nuclei"
+chmod +x "$HOME/go/bin/nuclei"
+rm -f "nuclei_${NUCLEI_VERSION#v}_linux_amd64.zip"
 
 echo "[+] Downloading Nuclei Templates..."
 ~/go/bin/nuclei -ut
