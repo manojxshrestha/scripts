@@ -23,7 +23,7 @@ ALIVE_URLS_FILE="${FOLDER}/alivesubsurls.txt"
 SUBDOMAINS_RAW="${FOLDER}/subdomains.txt"
 ALIVE_SUBDOMAINS="${FOLDER}/alivesubdomains.txt"
 
-EXCLUDE_EXT="(woff|woff2|ttf|eot|otf|png|svg|jpg|jpeg|gif|ico|bmp|webp|map)(\?.*)?$"
+EXCLUDE_EXT="(woff|woff2|ttf|eot|otf|png|svg|jpg|jpeg|gif|ico|bmp|webp)(\?.*)?$"
 
 echo "[*] Extracting scoped URLs from $FOLDER for domain: $DOMAIN"
 
