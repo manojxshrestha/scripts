@@ -4,7 +4,7 @@ output_file="crawledurls.txt"
 param_file="param-urls.txt"
 temp_file=$(mktemp)
 challenge_noise='__cf_chl'
-tracking_noise='^(utm_[a-z_]+|fbclid|gclid|_zendesk)$'
+tracking_noise='^(utm_[a-z_]+|fbclid|gclid|msclkid|mc_eid|igshid|_zendesk)$'
 
 trap 'rm -f "$temp_file"' EXIT
 
@@ -73,3 +73,37 @@ awk -v track="$tracking_noise" '
     print base "?" out
 }' "$output_file" | sort -u > "$param_file"
 echo "[+] Param URLs saved to $param_file: $(wc -l < "$param_file")"
+
+# Step 4: Extract PATH-parameterized API routes (query-param extraction above
+# structurally misses REST/RPC routes where identifiers live in the path,
+# e.g. /resource/XResource/create, /api/v3/pidgets/boards/{u}/{b}/pins,
+# /url_shortener/{hex}/redirect, /users/12345/profile).
+route_file="api-routes.txt"
+awk '
+{
+    url = $0
+    sub(/#.*/, "", url)
+    sub(/\?.*/, "", url)
+    host = ""
+    if (match(url, /^https?:\/\/[^\/?#]+/)) {
+        host = substr(url, RSTART, RLENGTH)
+        sub(/^https?:\/\//, "", host)
+        host = tolower(host)
+    }
+    path = url
+    sub(/^https?:\/\/[^\/]+/, "", path)
+    if (path !~ /\//) { next }
+    n = split(path, seg, "/")
+    hit = 0
+    for (i = 1; i <= n; i++) {
+        s = seg[i]
+        if (s ~ /^[0-9]{3,}$/)                { hit = 1 }
+        else if (s ~ /^[0-9a-fA-F]{8,}$/)     { hit = 1 }
+        else if (s ~ /^v[0-9]+$/)             { hit = 1 }
+        else if (tolower(s) == "resource")    { hit = 1 }
+    }
+    if (!hit && path ~ /\/(api\/v[0-9]+|resource)\//) { hit = 1 }
+    if (!hit && host ~ /^api\./)                        { hit = 1 }
+    if (hit) print url
+}' "$output_file" | sort -u > "$route_file"
+echo "[+] API routes saved to $route_file: $(wc -l < "$route_file")"
