@@ -2,10 +2,15 @@
 set -uo pipefail
 # NOTE: no 'set -e' — grep/httpx non-zero statuses are routine here, not fatal.
 
-input_file="merged-crawl.txt"
+input_file="${1:-merged-crawl.txt}"
 out_dir="check"
 output_file="$out_dir/crawledurls.txt"
 param_file="$out_dir/param-urls.txt"
+raw_file="$out_dir/httpx-raw.txt"
+api_file="$out_dir/api-candidates.txt"
+idor_file="$out_dir/idor-candidates.txt"
+api_param_file="$out_dir/api-param-candidates.txt"
+idor_param_file="$out_dir/idor-param-candidates.txt"
 temp_file=$(mktemp)
 challenge_noise='__cf_chl'
 tracking_noise='^(utm_[a-z0-9_]+|fbclid|gclid|msclkid|mc_eid|igshid|_zendesk)$'
@@ -18,7 +23,31 @@ httpx -h 2>&1 | grep -- '-threads' > /dev/null || { echo "Error: 'httpx' is not 
 
 [ -f "$input_file" ] || { echo "Error: Input file '$input_file' not found in the current directory."; exit 1; }
 
-mkdir -p "$out_dir"
+mkdir -p "$out_dir" || { echo "FATAL: cannot create output dir '$out_dir' (permissions/disk?). Aborting."; exit 1; }
+[ -d "$out_dir" ] && [ -w "$out_dir" ] || { echo "FATAL: '$out_dir' is not a writable directory. Aborting."; exit 1; }
+
+print_summary() {
+fcount() { if [ -f "$1" ]; then wc -l < "$1"; else echo 0; fi; }
+echo
+echo "========== FILTER SUMMARY =========="
+printf '%-22s %s\n' "Domain-filtered:" "$(fcount "$temp_file")"
+echo
+printf '%-22s %s  -> %s\n' "Live URLs:" "$(fcount "$output_file")" "crawledurls.txt"
+printf '%-22s %s  -> %s\n' "Parameter URLs:" "$(fcount "$param_file")" "param-urls.txt"
+printf '%-22s %s  -> %s\n' "API candidates:" "$(fcount "$api_file")" "api-candidates.txt"
+printf '%-22s %s  -> %s\n' "API + params:" "$(fcount "$api_param_file")" "api-param-candidates.txt"
+printf '%-22s %s  -> %s\n' "IDOR candidates:" "$(fcount "$idor_file")" "idor-candidates.txt"
+printf '%-22s %s  -> %s\n' "IDOR + params:" "$(fcount "$idor_param_file")" "idor-param-candidates.txt"
+echo
+echo "File contents:"
+echo "  crawledurls.txt           = all live/in-scope URLs"
+echo "  param-urls.txt            = live URLs with key=value parameters"
+echo "  api-candidates.txt        = suspected API/technical routes"
+echo "  api-param-candidates.txt  = API candidates with query parameters"
+echo "  idor-candidates.txt       = URLs containing likely object references"
+echo "  idor-param-candidates.txt = IDOR candidates with query parameters"
+echo "===================================="
+}
 
 read -r -p "Enter domain to filter (e.g., example.com): " domain
 
@@ -52,14 +81,32 @@ awk -v d="$domain" -v ed="$escaped_domain" '
 }' "$input_file" \
   | grep -aviE "$challenge_noise" \
   | sort -u > "$temp_file"
-echo "[*] Domain-filtered URLs: $(wc -l < "$temp_file")"
+scoped_n=$(wc -l < "$temp_file")
+echo "[*] Domain-filtered URLs: $scoped_n"
+if [ "$scoped_n" -eq 0 ]; then
+    echo "[!] ABORT: nothing matched '$domain' — check domain spelling (e.g. libelle.nl, not libelle.com). No files touched."
+    exit 1
+fi
 
 # Step 2: Liveness — output is the original URL (plain httpx mode, no -sc/-cl parsing).
 #         Do NOT pass -fr: redirects are intentionally not followed (default), so the
 #         original URL is preserved. Keep WAF/403/401/429/5xx alive, drop 404s + errors.
-httpx -silent -no-color -threads 100 -timeout 15 -retries 2 -fc 404,000 \
-  < "$temp_file" | sort -u > "$output_file"
+: > "$raw_file"
+httpx -silent -no-color -threads 150 -timeout 8 -retries 1 -fc 404,000 \
+  < "$temp_file" | tee "$raw_file" | sort -u > "$output_file"
 echo "[+] Clean URLs saved to $output_file: $(wc -l < "$output_file")"
+alive_n=$(wc -l < "$output_file")
+if [ "$alive_n" -eq 0 ] && [ -s "$raw_file" ]; then
+    echo "[!] httpx output empty but partial run captured — recovering probed URLs..."
+    sort -u "$raw_file" > "$output_file"
+    alive_n=$(wc -l < "$output_file")
+    echo "[+] Recovered URLs in $output_file: $alive_n"
+fi
+if [ "$alive_n" -eq 0 ]; then
+    echo "[!] WARNING: 0 live URLs — keeping previous candidate files untouched."
+    print_summary
+    exit 0
+fi
 
 # Step 3: Extract real key=value param URLs; strip fragments + tracking params but keep the URL.
 awk -v track="$tracking_noise" '
@@ -86,10 +133,6 @@ echo "[+] Param URLs saved to $param_file: $(wc -l < "$param_file")"
 # structurally misses REST/RPC routes where identifiers live in the path,
 # e.g. /resource/XResource/create, /api/v3/pidgets/boards/{u}/{b}/pins,
 # /url_shortener/{hex}/redirect, /users/12345/profile).
-api_file="$out_dir/api-candidates.txt"
-idor_file="$out_dir/idor-candidates.txt"
-api_param_file="$out_dir/api-param-candidates.txt"
-idor_param_file="$out_dir/idor-param-candidates.txt"
 # API candidates: endpoint discovery. IDOR candidates: object-reference targets.
 # A URL can land in both (e.g. /api/v1/users/123).
 # *-param files keep the exact query-bearing URLs for authz correlation
@@ -150,13 +193,4 @@ echo "[+] IDOR candidates saved to $idor_file: $(wc -l < "$idor_file")"
 echo "[+] API param candidates saved to $api_param_file: $(wc -l < "$api_param_file")"
 echo "[+] IDOR param candidates saved to $idor_param_file: $(wc -l < "$idor_param_file")"
 
-echo
-echo "========== FILTER SUMMARY =========="
-printf '%-22s %s\n' "Domain-filtered:" "$(wc -l < "$temp_file")"
-printf '%-22s %s\n' "Live URLs:" "$(wc -l < "$output_file")"
-printf '%-22s %s\n' "Parameter URLs:" "$(wc -l < "$param_file")"
-printf '%-22s %s\n' "API candidates:" "$(wc -l < "$api_file")"
-printf '%-22s %s\n' "API + params:" "$(wc -l < "$api_param_file")"
-printf '%-22s %s\n' "IDOR candidates:" "$(wc -l < "$idor_file")"
-printf '%-22s %s\n' "IDOR + params:" "$(wc -l < "$idor_param_file")"
-echo "===================================="
+print_summary
